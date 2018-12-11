@@ -1,0 +1,105 @@
+---
+title: "Final Portfolio_2"
+author: "Mutong Yang"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This dataset is about student alcohol consumption, variables in this dataset contains school, sex, age, address (student's home address), famsize (family size), Pstatus (parent's cohabitation status), Medu and Fefu (mother's and father's education), Mjob and Fjob (mother's and father's job), reason (reason choosing their school), guardian (student's guardian), traveltime (home to school travel time), studytime (weekly study time), failures (number of past class failures), schoolsup (extra educational support or not),famsup (family educational support or not), paid (extra paid classes within the course subject or not), activities (extra-curricular activities or not), nursery (attended nursery school or not), higher (wants to take higher education or not), internet (internet access at home or not), romantic (with a romantic relationship or not), famrel (quality of family relationsips), freetime (free time after school), goout (going out with friends), Dalc (workday alcohol consumption), Walc (weekend alcohol consumption), health (current health status), absences (number of school absences), G1 (first period grade), G2 (second period grade) and G3 (final grade).
+
+## Read in Data
+```{r}
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(corrgram)
+library(cluster)
+library(factoextra)
+
+setwd("C:/Users/muton/Desktop/BZAN 552 Multivariate Data Mining Techq/Final Portfolios")
+df <- read.csv("student-mat.csv", header = TRUE) # load in data with students who are taking math course
+```
+
+First, we are going to clean the data and build a correlation matrix
+
+```{r}
+df.mut<- df %>%
+  mutate(y = (G1+G2+G3)/3) %>%
+  select(-G1, -G2, -G3)
+
+df.mat <- data.frame(model.matrix( ~ .- 1, data=df.mut)) 
+
+
+df.cor <- cor(df.mat, df.mat, method = "pearson")
+df.cor<- data.frame(cor=df.cor[1:40,41], varnames = names(df.cor[1:40,41])) 
+df.cor<- df.cor%>%
+  mutate(absval = abs(cor)) %>% 
+  arrange(desc(absval))
+
+plot(df.cor$absval, type="l")
+```
+
+We see that we have a sufficient number of variables at a correlation threshhold of ~0.1.
+Now Let's filter the correlation matrix based on this cutoff.
+
+```{r}
+df.cols <- df.cor %>% 
+  filter(absval>0.10)
+df.filt <- data.frame(df.mat) %>%
+  select(y,one_of(as.character(df.cols$varnames)))
+
+head(df.filt)
+
+corrgram(df.filt,lower.panel=panel.cor,upper.panel=panel.pie, cor.method = "pearson")
+
+summary(lm(data = df.filt, y ~ .))
+```
+
+We had successfully reduced the number of variables in our dataset. Our R2 value is ~0.25, which isn't that great, but its not totally unexpected.
+
+We can see that failures (number of past class failures) is the most significant one, while goout (going out with friends), schoolsupyes (extra educational support), sexM (whether the student is a male), studytime (student's weekly study time) and Fjobteacher (whether the student's father's job is a teacher) are also significant.
+
+Let's take the most significant numeric variables and create boxplots for each level of Daily Alcohol Consumption to see how this affects student performance.
+
+maybe this will shine some light on the low R2 value.
+
+```{r}
+df.num<-df.mut[,c('failures', 'goout', 'studytime', 'Dalc', 'y')]
+
+ggplot(df.num, aes(x=Dalc, y=y, group=Dalc))+
+  geom_boxplot()+
+  theme(legend.position="none")+
+  xlab("Daily Alcohol consumption")+
+  ylab("Average Grades")+
+  ggtitle("Average Grade")
+```
+
+
+It is pretty easy to see that the most significant effect that daily alcohol consumption is having on our data is a reduction in variance. This could be from decreasing sample sizes for higher levels of consuption, however. 
+
+Let's get back to checking out the power of our selected variables. Time to do some PCA!
+
+
+```{r}
+df.red <- df.filt %>% 
+  select(-y)
+
+df.pca = prcomp(df.red, scale. = T, center = T)
+
+plot(df.pca, type="l")
+
+summary(df.pca)
+
+fviz_pca_biplot(df.pca, col.var = "black", col.ind = "orange")
+```
+
+The biplot reveals influence of each variable, with length of arrows indicating magnitude, while direction indicates the nature of its influence on student performance.
+
+This exercise has shown the effectiveness of pca in reducing dimensions for clustering analysis. We have selected 16 variables from the original ~40 while eliminating multicoliearity from our predictors. 
+
+Overall, this is an effective method for taking large datasets and making their correlation computationally feasible. Thank you for taking the time to read my blog!
+
+
